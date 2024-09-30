@@ -1,0 +1,249 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#install.packages('openxlsx')
+library(openxlsx)
+library(statnet)
+library(dplyr)
+library(readr)
+
+
+data <- read.csv("Alliances.csv") 
+
+```
+
+
+```{r}
+
+library(dplyr)
+
+
+# Normalize the edge list and remove duplicates
+normalized_data <- data %>%
+  mutate(Source = pmin(Source, Target),
+         Target = pmax(Source, Target)) %>%
+  distinct()
+
+# Check to see if duplicates are properly handled
+print(sum(duplicated(normalized_data)))
+
+```
+
+```{r}
+# Remove self-loops
+cleaned_data <- normalized_data %>%
+  filter(Source != Target)
+```
+
+
+```{r}
+
+# Create the network object
+net <- network(cleaned_data, directed = FALSE)
+
+plot(net)
+
+```
+
+
+```{r}
+# degree centrality
+degree_centrality <- degree(net)
+
+net %v% "degree_centrality" <- degree_centrality
+net
+
+node_degrees <- degree(net)
+net <- set.vertex.attribute(net, 'degree', node_degrees)
+
+```
+
+
+
+```{r}
+
+#Calculate degree centrality for each node
+degree_centrality <- degree(net, cmode = "freeman")
+
+betweenness_centrality <- betweenness(net, cmode = 'freeman')
+
+set.vertex.attribute(net, "degree_centrality", degree_centrality)
+set.vertex.attribute(net, "betweenness_centrality", betweenness_centrality)
+
+# Here I define ERGMs
+formula1 <- net ~ edges
+formula2 <- net ~ edges + nodecov("degree_centrality") 
+formula3 <- net ~ edges + nodecov("degree_centrality") + nodematch('degree')
+formula4 <- net ~ edges + nodecov("degree_centrality") + nodematch('degree') + gwesp(decay =1, fixed=TRUE, cutoff = 75)
+formula5 <- net ~ edges + nodecov("degree_centrality") + nodematch('degree') + dsp(d=2)
+formula6 <- net ~ edges + nodecov("degree")
+formula7 <- net ~ edges + kstar(2) + triangle
+formula8 <- net ~ edges + nodecov("degree_centrality") + nodematch('degree') + gwdegree(fixed=FALSE, cutoff=100)
+
+
+```
+
+
+```{r}
+formula9 <- net ~ edges + gwesp(1, fixed=TRUE) + dsp(d=2) +
+  gwdsp(1, fixed=TRUE) +
+  nodecov("degree_centrality") + nodematch("degree") 
+```
+
+
+```{r}
+
+ergm_model1 <- ergm(formula1)
+summary(ergm_model1)
+```
+
+```{r}
+ergm_model3 <- ergm(formula3)
+summary(ergm_model3)
+```
+
+```{r}
+# Here I test alternatives to formula4
+formula4 <- net ~ edges + nodecov("degree_centrality") + nodematch('degree') + gwesp(decay =1.5, fixed=TRUE, cutoff = 75) + dsp(d=2)
+ergm_model4 <- ergm(formula4)
+summary(ergm_model4)
+```
+
+```{r}
+betweenness_centrality <- betweenness(net)
+set.vertex.attribute(net, "betweenness_centrality", betweenness_centrality)
+```
+
+```{r}
+#THIS IS A VERY IMPORTANT MODEL
+library(ergm)
+
+formula5 <- net ~ edges + dsp(d=2) + nodecov("degree_centrality") + gwesp(decay =1.5, fixed=TRUE, cutoff = 10) + nodecov("betweenness_centrality") + nodematch('degree')
+ergm_model5 <- ergm(formula5)
+summary(ergm_model5)
+```
+
+```{r}
+par(mfrow=c(1,1), mar=c(2, 2, 2, 2) + 0.1)
+diagnostics5 <- mcmc.diagnostics(ergm_model5)
+```
+
+```{r}
+library(ergm)
+library(statnet)
+fit <- ergm(formula5)
+
+# GOF test
+gof_results <- gof(fit)
+
+plot(gof_results)
+```
+
+```{r}
+library(statnet)
+library(dplyr)
+library(dplyr)
+
+data2 <- read.csv("BACRIM_DEC23.csv") 
+```
+
+```{r}
+
+library(dplyr)
+
+# Normalize the edge list 
+normalized_data2 <- data2 %>%
+  mutate(Source = pmin(grupo, aliados),
+         Target = pmax(grupo, aliados)) %>%
+  distinct()
+print(sum(duplicated(normalized_data2)))
+```
+
+```{r}
+# Remove self-loops
+cleaned_data2 <- normalized_data2 %>%
+  filter(Source != Target)
+
+# Removed duplicates
+cleaned_data2_sorted <- cleaned_data2 %>%
+  mutate(across(c(Source, Target), as.character)) %>%
+  rowwise() %>%
+  mutate(edge = paste(sort(c(Source, Target)), collapse = "-")) %>%
+  ungroup() %>%
+  distinct(edge, .keep_all = TRUE) %>%
+  select(Source, Target)
+
+# Create a mapping of node names to numbers
+node_names <- unique(c(cleaned_data2_sorted$Source, cleaned_data2_sorted$Target))
+node_mapping <- setNames(seq_along(node_names), node_names)
+
+# Cleaned data
+cleaned_data2_sorted_numeric <- cleaned_data2_sorted %>%
+  mutate(Source = node_mapping[Source],
+         Target = node_mapping[Target])
+
+print(node_mapping)
+print(cleaned_data2_sorted_numeric)
+
+# Create the network object
+net2_numeric <- network(cleaned_data2_sorted_numeric, directed = FALSE)
+
+plot(net2_numeric, displaylabels = TRUE)
+```
+
+```{r}
+# degree centrality
+degree_centrality <- degree(net2_numeric)
+
+net2_numeric %v% "degree_centrality" <- degree_centrality
+net2_numeric
+
+node_degrees <- degree(net2_numeric)
+net2_numeric <- set.vertex.attribute(net2_numeric, 'degree', node_degrees)
+```
+```{r}
+library(ergm)
+library(statnet)
+
+
+# Calculate betweenness centrality
+betweenness_centrality <- betweenness(net2_numeric)
+set.vertex.attribute(net2_numeric, "betweenness_centrality", betweenness_centrality)
+
+# Calculate degree centrality
+degree_centrality <- degree(net2_numeric)
+set.vertex.attribute(net2_numeric, "degree_centrality", degree_centrality)
+
+
+# Define the ERGM formula
+formula15 <- net2_numeric ~ edges + dsp(d=1) + nodecov("degree_centrality") + nodecov("betweenness_centrality") + nodematch("degree_centrality")
+
+# Fit the ERGM model
+ergm_model15 <- ergm(formula15)
+
+# Summarize the ERGM model
+summary(ergm_model15)
+```
+
+```{r}
+par(mfrow=c(1,1), mar=c(2, 2, 2, 2) + 0.1)
+diagnostics15 <- mcmc.diagnostics(ergm_model15)
+```
+
+```{r}
+fit <- ergm(formula15)
+
+# GOF test
+gof_results <- gof(fit)
+
+plot(gof_results)
+```
+
+
+
+
+
+
